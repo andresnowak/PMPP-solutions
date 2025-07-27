@@ -28,6 +28,50 @@ D. Write a **kernel** that has each thread produce **one output matrix column**.
 
 E. Analyze the **pros and cons** of each kernel design above.
 
+**Answer**:
+- B
+```c++
+__global__ void matrix_addition(float *A, float *B, float *C, const int N, const int M) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x; // position in x
+    int idy = blockIdx.y * blockDim.y + threadIdx.y; // position in y
+
+    if (idx < M && idy < N) {
+        int position = idy * M + idx;
+        C[position] = A[position] + B[position];
+    } 
+}
+```
+- C
+```c++
+__global__ void matrix_addition_2(float *A, float *B, float *C, const int N, const int M) {
+    int idy = blockIdx.y * blockDim.y + threadIdx.y; // position in y
+
+    if (idy < N) {
+        for (int idx = 0; idx < M; ++idx) {
+            int position = idy * M + idx;
+            C[position] = A[position] + B[position]; 
+        }
+    } 
+}
+```   
+- D
+```c++
+__global__ void matrix_addition_3(float *A, float *B, float *C, const int N, const int M) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x; // position in x
+
+    if (idx < M) {
+        for (int idy = 0; idy < N; ++idy) {
+            int position = idy * M + idx;
+            C[position] = A[position] + B[position];
+        }
+    } 
+}
+```
+- E
+  - For answer B, this is the one that has perfect load balance, and has coalesced memory access (row-major)
+  - For answer C, it has Coalesced memory access along rows, but its cons is that it has bad occupancy for small N, like here we only use 64 threads and we only have 2 blocks (vectors) and has more control-flow overhead (because of the for loop)
+  - For answer D, its cons are that it doesn't have coalesced memory access (because it is accessing memory in column-major layout when we have row-major layout) and it has bad occupancy for small M and has more control-flow overhead (because of the for loop).
+
 ---
 
 ### 2. Matrix–Vector Multiplication
@@ -92,11 +136,18 @@ D. 6
 
 You need to write a kernel that operates on an image of size **400 × 900** pixels. You would like to assign **one thread to each pixel**. You would like your thread blocks to be **square** and to use the **maximum number of threads per block possible** on the device (your device has compute capability **3.0**). How would you select the **grid dimensions** and **block dimensions** of your kernel?
 
+**Answer**:
+- Compute capability **3.0** has 1024 threads per block
+- so we can have blocks of size $32 \cdot 32 = 1024$
+- The dimensions of block would be $\text{block dim} = {32, 32, 1}$ and for grid would be $\text{grid dim} = {29, 13, 1}$
+
 ---
 
 ### 7. Idle Threads
 
 With reference to the previous question, how many **idle threads** do you expect to have?
+
+**Answer**: $13 * 32 * 32 * 29 = 386048$ and we have that $400 * 900 = 360000$, so we have $386048-360000=26048$ idle threads
 
 ---
 
@@ -126,7 +177,7 @@ F. 16 blocks with 64 threads each on a device with compute capability **3.0**
 
 **Answer**:
 - Correct ones are B, C and F
-- Incorrect ones are A, because it can only have maximum of 512 threads (or 768 threads not sure), but here we get $8 \ctimes 128 = 1024 > 512$. then for D and E is incorrect because they can only have 8 blocks while compute capability can have 16 blocks in an SM
+- Incorrect ones are A, because it can only have maximum of 512 threads (or 768 threads not sure), but here we get $8 \cdot 128 = 1024 > 512$. then for D and E is incorrect because they can only have 8 blocks while compute capability can have 16 blocks in an SM
 
 ---
 
@@ -142,4 +193,4 @@ A CUDA programmer says that if they launch a kernel with **only 32 threads in ea
 
 A student mentioned that he was able to multiply two **1024 × 1024** matrices by using a **tiled matrix multiplication** code with **32 × 32 thread blocks**. He is using a CUDA device that allows up to **512 threads per block** and up to **8 blocks per SM**. He further mentioned that **each thread in a thread block calculates one element of the result matrix**. What would be your reaction and why?
 
-**Answer**: That is not possible because $32 \ctimes 32 = 1024$ and the blocks can only have 512 threads
+**Answer**: That is not possible because $32 \cdot 32 = 1024$ and the blocks can only have 512 threads
