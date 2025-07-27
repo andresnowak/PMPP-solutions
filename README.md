@@ -1,6 +1,6 @@
 # PMPP-solutions
 
-Solutions to the Programming massively parallel processes 3rd edition book
+Solutions to the Programming massively parallel processors (PMPP) 3rd edition book
 
 - [x] Chapter 2
 - [x] Chapter 3
