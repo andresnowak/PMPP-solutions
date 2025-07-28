@@ -185,7 +185,7 @@ F. 16 blocks with 64 threads each on a device with compute capability **3.0**
 
 A CUDA programmer says that if they launch a kernel with **only 32 threads in each block**, they can **leave out the `__syncthreads()` instruction** wherever barrier synchronization is needed. Do you think this is a good idea? Explain.
 
-**Answer**: No, because even though a warps executes in lockstep, threads in a warp can have different execution timings, if all threads in a warp need to complete a phase before they can move on, it is necessary to barrier synchronization like `__syncwarp()`
+**Answer**: No, because even though a warps executes in lockstep, threads in a warp can have different execution timings, if all threads in a warp need to complete a phase before they can move on, it is necessary to barrier synchronization like `__syncwarp()` (but this is only if warps have control divergence, if not it is possible to do inter thread communication with things like `__shfl_sync`, `__shfl_up_sync`, `__shfl_down_sync`, `__shfl_xor_sync`)
 
 ---
 
