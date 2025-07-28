@@ -159,8 +159,8 @@ Consider a hypothetical block with **8 threads** executing a section of code bef
 
 **Answer**: 
 Time until threads can continue is 3.0 ms as that is the last thread to finish.
-Sum of all their waiting times is $S = {2.0, 2.3, 3.0, 2.8, 2.4, 1.9, 2.6, 2.9}$, $\text{waiting time} = \sum^{|S|}_{i=1} (3.0 - x_i) = 3.9ms$ and total execution time is $\text{execution time} = 3.0ms * |S| = 24.0ms$.
-So the percentage of waiting time is $\frac{3.9}{24} \cdot 100\% = 16.25\%$ 
+Sum of all their waiting times is $S = {2.0, 2.3, 3.0, 2.8, 2.4, 1.9, 2.6, 2.9}$, $\text{waiting time} = \sum^{|S|}_{i=1} (3.0 - x_i) = 4.1ms$ and total execution time is $\text{execution time} = 3.0ms * |S| = 24.0ms$.
+So the percentage of waiting time is $\frac{4.1}{24} \cdot 100\% = 17.1\%$ 
 
 ---
 
