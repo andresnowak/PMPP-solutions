@@ -4,5 +4,5 @@ Solutions to the Programming massively parallel processors (PMPP) 3rd edition an
 
 - [x] Chapter 2 (3rd edition)
 - [x] Chapter 3 (3rd edition)
-- [ ] Chapter 4 (4th edition)
+- [x] Chapter 4 (4th edition)
 - [ ] Chapter 5 (4th edition)
