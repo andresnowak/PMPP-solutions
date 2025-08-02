@@ -35,7 +35,7 @@ __global__ void matmul(const float *input_a, const float *input_b, float *output
 
         __syncthreads();
 
-#pragma unroll
+        #pragma unroll
         for (int i = 0; i < TILE_WIDTH; ++i)
         {
             p_value += Nds[threadIdx.y][i] * Mds[i][threadIdx.x]; // <row, column>
