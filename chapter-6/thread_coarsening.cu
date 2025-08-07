@@ -2,52 +2,70 @@
 #include <iostream>
 
 #define TILE_WIDTH 32
+#define COARSE_FACTOR 4
 
 __global__ void matmul(const float *input_a, const float *input_b, float *output_c, size_t m, size_t n, size_t k)
 {
+    // We will repeat the work in N dimension so in B
     __shared__ float Nds[TILE_WIDTH][TILE_WIDTH];
     __shared__ float Mds[TILE_WIDTH][TILE_WIDTH];
 
-    // TILE_WIDTH is the same as block dimensions x and y
-    int px = blockIdx.x * blockDim.x + threadIdx.x;
-    int py = blockIdx.y * blockDim.y + threadIdx.y;
+    int col_start = blockIdx.x * TILE_WIDTH * COARSE_FACTOR + threadIdx.x;
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
 
-    float p_value = 0;
+    float p_value[COARSE_FACTOR];
+    #pragma unroll
+    for (int c = 0; c < COARSE_FACTOR; ++c)
+    {
+        p_value[c] = 0;
+    }
+
     for (int pk = 0; pk < (k + TILE_WIDTH - 1) / TILE_WIDTH; ++pk)
     {
         int a_col = TILE_WIDTH * pk + threadIdx.x;
-        if (py < m && a_col < k)
+        if (row < m && a_col < k)
         {
-            Nds[threadIdx.y][threadIdx.x] = input_a[py * k + a_col];
-        }
-        else
-        {
-            Nds[threadIdx.y][threadIdx.x] = 0;
-        }
-        int b_row = (threadIdx.y + TILE_WIDTH * pk);
-        if (b_row < k && px < n)
-        {
-            Mds[threadIdx.y][threadIdx.x] = input_b[b_row * n + px];
+            Mds[threadIdx.y][threadIdx.x] = input_a[row * k + a_col];
         }
         else
         {
             Mds[threadIdx.y][threadIdx.x] = 0;
         }
 
-        __syncthreads();
 
-        #pragma unroll
-        for (int i = 0; i < TILE_WIDTH; ++i)
+        for (int c = 0; c < COARSE_FACTOR; ++c)
         {
-            p_value += Nds[threadIdx.y][i] * Mds[i][threadIdx.x]; // <row, column>
-        }
 
-        __syncthreads();
+            int b_row = (threadIdx.y + TILE_WIDTH * pk);
+            int b_col = col_start + TILE_WIDTH * c;
+            if (b_row < k && b_col < n)
+            {
+                Nds[threadIdx.y][threadIdx.x] = input_b[b_row * n + b_col];
+            }
+            else
+            {
+                Nds[threadIdx.y][threadIdx.x] = 0;
+            }
+
+            __syncthreads();
+
+            for (int i = 0; i < TILE_WIDTH; ++i)
+            {
+                p_value[c] += Mds[threadIdx.y][i] * Nds[i][threadIdx.x]; // <row, column>
+            }
+
+            __syncthreads();
+        }
     }
 
-    if (py < m && px < n)
+    #pragma unroll
+    for (int c = 0; c < COARSE_FACTOR; ++c)
     {
-        output_c[py * n + px] = p_value;
+        int col = col_start + TILE_WIDTH * c;
+        if (row < m && col < n)
+        {
+            output_c[row * n + col] = p_value[c];
+        }
     }
 }
 
@@ -106,7 +124,7 @@ int main()
     cudaMemcpy(B_d, B, K * N * sizeof(float), cudaMemcpyHostToDevice);
 
     dim3 block_dim(TILE_WIDTH, TILE_WIDTH, 1);
-    dim3 grid_dim((N + TILE_WIDTH - 1) / TILE_WIDTH, (M + TILE_WIDTH - 1) / TILE_WIDTH, 1);
+    dim3 grid_dim((N + TILE_WIDTH * COARSE_FACTOR - 1) / (TILE_WIDTH * COARSE_FACTOR), (M + TILE_WIDTH - 1) / TILE_WIDTH, 1); // Because now each block does tiles * COARSE_FACTOR of work in the N dimension of B for the output of C
     matmul<<<grid_dim, block_dim>>>(A_d, B_d, C_d, M, N, K);
 
     // Copy result back to host

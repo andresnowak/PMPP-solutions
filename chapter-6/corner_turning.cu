@@ -8,7 +8,6 @@ __global__ void matmul(const float *input_a, const float *input_b, float *output
     __shared__ float Nds[TILE_WIDTH][TILE_WIDTH];
     __shared__ float Mds[TILE_WIDTH][TILE_WIDTH];
 
-    // TILE_WIDTH is the same as block dimensions x and y
     int px = blockIdx.x * blockDim.x + threadIdx.x;
     int py = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -27,7 +26,8 @@ __global__ void matmul(const float *input_a, const float *input_b, float *output
         int b_row = (threadIdx.y + TILE_WIDTH * pk);
         if (b_row < k && px < n)
         {
-            Mds[threadIdx.y][threadIdx.x] = input_b[b_row * n + px];
+            Mds[threadIdx.y][threadIdx.x] = input_b[px * k + b_row];
+            // Here we are transposing b to get what we had before corner turning (because now b is transposes we have to get the data in in column order instead of row order but then we save the data in the shared memory as row order)
         }
         else
         {
@@ -85,19 +85,19 @@ int main()
     cudaMalloc(&B_d, K * N * sizeof(float));
     cudaMalloc(&C_d, M * N * sizeof(float));
 
-    // Create the input matrix and vector
-    for (int i = 0; i < N; ++i)
+    // Create the input matrix and vector (Now we say that memory is saved in Column major order)
+    for (int i = 0; i < K; ++i)
     {
-        for (int j = 0; j < K; ++j)
+        for (int j = 0; j < M; ++j)
         {
             A[i * K + j] = static_cast<float>(3);
         }
     }
-    for (int i = 0; i < K; ++i)
+    for (int i = 0; i < N; ++i)
     {
-        for (int j = 0; j < N; ++j)
+        for (int j = 0; j < K; ++j)
         {
-            B[i * N + j] = static_cast<float>(2);
+            B[i * K + j] = static_cast<float>(2);
         }
     }
 
