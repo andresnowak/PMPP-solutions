@@ -7,16 +7,20 @@ __constant__ float G[(2 * FILTER_RADIUS + 1) * (2 * FILTER_RADIUS + 1)]; // We c
 
 #define TILE_DIM 32
 
-__global__ void convolution(const float *f, float *o, const int width, const int height, const int radius_x, const int radius_y) {
+__global__ void convolution(const float *f, float *o, const int width, const int height, const int radius_x, const int radius_y)
+{
     // the position calculation at the end of the day is still based on the output tile, but the amount of threads we ahve in a block is of size input_tile
     int col = blockIdx.x * TILE_DIM + threadIdx.x - FILTER_RADIUS; // Substract R as input_tile size is based on 2*R (diameter), but we only want radius for position
     int row = blockIdx.y * TILE_DIM + threadIdx.y - FILTER_RADIUS;
 
     __shared__ float input_tile[TILE_DIM][TILE_DIM];
 
-    if (row >= 0 && row < height && col >= 0 && col < width) {
+    if (row >= 0 && row < height && col >= 0 && col < width)
+    {
         input_tile[threadIdx.y][threadIdx.x] = f[row * width + col];
-    } else {
+    }
+    else
+    {
         input_tile[threadIdx.y][threadIdx.x] = 0; // Ghost cell (default value 0)
         // No memory access
     }
@@ -27,24 +31,30 @@ __global__ void convolution(const float *f, float *o, const int width, const int
     int tile_row = threadIdx.y - FILTER_RADIUS;
 
     // turning off the threads at the edges of the block
-    if (col >= 0 && col < width && row >= 0 && row < height) {
+    if (col >= 0 && col < width && row >= 0 && row < height)
+    {
         float p_value = 0.0f;
 
-        for(int i = 0; i < (2 * radius_y + 1); i++) {
-            for(int j = 0; j < (2 * radius_x + 1); j++) {
+        for (int i = 0; i < (2 * radius_y + 1); i++)
+        {
+            for (int j = 0; j < (2 * radius_x + 1); j++)
+            {
                 // Here we check if we are inside the tile, so we are basicaly hecking if we aren't a hallo cell
-                if (tile_col + j >= 0 && tile_col + j < TILE_DIM && tile_row + i >= 0 && tile_row + i < TILE_DIM) {
+                if (tile_col + j >= 0 && tile_col + j < TILE_DIM && tile_row + i >= 0 && tile_row + i < TILE_DIM)
+                {
                     p_value += input_tile[tile_row + i][tile_col + j] * G[i * (2 * radius_x + 1) + j];
-                } else {
+                }
+                else
+                {
                     // If we are a ghost cell we instead load from global memory (in this case probability is that we will load from l2)
                     int in_row = row - FILTER_RADIUS + i;
                     int in_col = col - FILTER_RADIUS + j;
 
-                    if (in_row >= 0 && in_row < height && in_col >= 0 && in_col < width) {
+                    if (in_row >= 0 && in_row < height && in_col >= 0 && in_col < width)
+                    {
                         p_value += f[in_row * width + in_col] * G[i * (2 * radius_x + 1) + j];
                     }
                 }
-                
             }
         }
 
@@ -52,7 +62,8 @@ __global__ void convolution(const float *f, float *o, const int width, const int
     }
 }
 
-int main() {
+int main()
+{
     int n_x = 1 << 5;
     int n_y = 1 << 5;
 
@@ -61,16 +72,17 @@ int main() {
     int kernel_width = (2 * radius_x + 1);
     int kernel_height = (2 * radius_y + 1);
 
+    float *f = (float *)malloc(n_x * n_y * sizeof(float));
+    float *g = (float *)malloc(kernel_width * kernel_height * sizeof(float));
+    float *o = (float *)malloc(n_x * n_y * sizeof(float));
 
-    float *f = (float*)malloc(n_x * n_y * sizeof(float));
-    float *g = (float*)malloc(kernel_width * kernel_height * sizeof(float));
-    float *o = (float*)malloc(n_x * n_y * sizeof(float));
-
-    for(int i = 0; i < n_x * n_y; i++) {
+    for (int i = 0; i < n_x * n_y; i++)
+    {
         f[i] = 1.0f;
     }
 
-    for(int i = 0; i < kernel_width * kernel_height; i++) {
+    for (int i = 0; i < kernel_width * kernel_height; i++)
+    {
         g[i] = 2.0f;
     }
 
@@ -81,24 +93,28 @@ int main() {
     cudaMalloc(&d_o, n_x * n_y * sizeof(float));
 
     cudaMemcpy(d_f, f, n_x * n_y * sizeof(float), cudaMemcpyHostToDevice);
-    cudaError_t cpy = cudaMemcpyToSymbol(G, g, kernel_width * kernel_height * sizeof(float), 0, cudaMemcpyHostToDevice);  // This is a special copy function that tell CUDA this data will not be changed during kernel execution
-    if (cpy != cudaSuccess) {
+    cudaError_t cpy = cudaMemcpyToSymbol(G, g, kernel_width * kernel_height * sizeof(float), 0, cudaMemcpyHostToDevice); // This is a special copy function that tell CUDA this data will not be changed during kernel execution
+    if (cpy != cudaSuccess)
+    {
         fprintf(stderr, "cudaMemcpyToSymbol failed: %s\n", cudaGetErrorString(cpy));
         exit(1);
     }
 
     dim3 threadsPerBlock = dim3(TILE_DIM, TILE_DIM);
-    dim3 blocksPerGrid = dim3((n_x + threadsPerBlock.x - 1) / threadsPerBlock.x, (n_y + threadsPerBlock.y - 1) / threadsPerBlock.y);
+    dim3 blocksPerGrid = dim3((n_x + FILTER_RADIUS + TILE_DIM - 1) / TILE_DIM, (n_y + FILTER_RADIUS + TILE_DIM - 1) / TILE_DIM);
+    // Here we are accounting for the part that the filter can be outside the matrix (the halo cells), so thats why we make n_x bigger with the filter radius
 
     convolution<<<blocksPerGrid, threadsPerBlock>>>(d_f, d_o, n_x, n_y, radius_x, radius_y);
     cudaError_t err = cudaDeviceSynchronize();
-    if (err != cudaSuccess) {
+    if (err != cudaSuccess)
+    {
         fprintf(stderr, "kernel launch failed: %s\n", cudaGetErrorString(err));
     }
 
     cudaMemcpy(o, d_o, n_x * n_y * sizeof(float), cudaMemcpyDeviceToHost);
 
-    for(int i = 0; i < 100; i++) {
+    for (int i = 0; i < 100; i++)
+    {
         printf("(%f - %f), ", f[i], o[i]);
     }
 
